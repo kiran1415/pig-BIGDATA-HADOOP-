@@ -1,0 +1,112 @@
+
+data set link --->>>
+
+https://drive.google.com/open?id=1z0gqDh8s0nBEWDmvmV1uScWc9mYRIbLG
+
+
+--<<<<<
+
+
+
+
+Now we will load the data into pig using PigStorage as follows:
+
+load_tweets = LOAD '/demonetization-tweets.csv' USING PigStorage(',');
+
+Now after loading successfully, you can see the tweets loaded successfully into pig by using the dump command.
+
+Here is the sample tweet
+
+("1","RT @rssurjewala: Critical question: Was PayTM informed about #Demonetization edict by PM? It's clearly fishy and requires full disclosure &amp;�",FALSE,0,NA,"2016-11-23 18:40:30",FALSE,NA,"801495656976318464",NA,"<a href=""http://twitter.com/download/android"" rel=""nofollow"">Twitter for Android</a>","HASHTAGFARZIWAL",331,TRUE,FALSE)
+
+Metadata of the tweets are as follows:
+
+    id
+
+    Text (Tweets)
+
+    favorited
+
+    favoriteCount
+
+    replyToSN
+
+    created
+
+    truncated
+
+    replyToSID
+
+    id
+
+    replyToUID
+
+    statusSource
+
+    screenName
+
+    retweetCount
+
+    isRetweet
+
+    retweeted
+
+
+
+          Now from this columns, we will extract the id and the tweet_text as follows
+
+          extract_details = FOREACH load_tweets GENERATE $0 as id,$1 as text;
+          
+
+           Now we will divide the tweet_text into words to calculate the sentiment of the whole tweet.
+
+           tokens = foreach extract_details generate id,text, FLATTEN(TOKENIZE(text)) As word;
+
+
+
+
+             Now, we have to analyse the Sentiment for the tweet by using the words in the text. We will rate the word as per its meaning from +5 to -5 using the dictionary AFINN. The AFINN is a dictionary which consists of 2500 words which are rated from +5 to -5 depending on their meaning. You can download the dictionary from the following link:
+
+             AFINN dictionary--> https://drive.google.com/open?id=13qRxilFzPofSDxnqhgBKzQQIUZJQn0P7
+         
+         
+         
+
+             We will load the dictionary into pig by using the below statement:
+
+             dictionary = load '/AFINN.txt' using PigStorage('\t') AS(word:chararray,rating:int);
+             
+             
+             
+             
+             
+             Now, let’s perform a map side join by joining the tokens statement and the dictionary contents using this relation: Hadoop
+
+              word_rating = join tokens by word left outer, dictionary by word using 'replicated';
+              
+              
+              Now we will extract the id,tweet text and word rating(from the dictionary) by using the below relation.
+
+              rating = foreach word_rating generate tokens::id as id,tokens::text as text, dictionary::rating as rate;
+              
+              
+              
+              Now, we will group the rating of all the words in a tweet by using the below relation:
+
+               word_group = group rating by (id,text);
+               
+               
+               
+               
+               Now, let’s perform the Average operation on the rating of the words per each tweet.
+
+                avg_rate = foreach word_group generate group, AVG(rating.rate) as tweet_rating;
+                
+                
+                Now we will filter the positive tweets using the below statement:
+
+                positive_tweets = filter avg_rate by tweet_rating>=0;
+                
+                Like this we will also filter the negative tweets as follows:
+
+                negative_tweets = filter avg_rate by tweet_rating<0;
